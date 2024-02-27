@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Callback Endpoint</title>
+        <style>
+            input {
+                width: 95%;
+            }
+            textarea {
+                width: 400px;
+                height: 200px;
+            }
+        </style>
+    </head>
+
+    <body>
+        <b>Success</b><br>
+        <div>Scope: {{scope}}</div> 
+
+        <h3>AccessToken</h3>
+        <input type="text" name="access_token" value="{{accessToken}}"><br>
+        <textarea>{{atPayload}}</textarea>
+
+        <h3>RefreshToken</h3>
+        <input type="text" name="refresh_token" value="{{refreshToken}}"><br>
+        <textarea>{{rtPayload}}</textarea>
+    </body>
+</html>

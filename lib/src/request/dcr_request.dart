@@ -34,6 +34,7 @@ class DcrRequest extends Request {
       "redirect_uris": redirectUri,
       "token_endpoint_auth_signing_alg": tokenEndpointAuthSigningAlg.name,
       "id_token_signed_response_alg": idTokenSignedResponseAlg.name,
+      // TODO: tokenENdpointAuthSigningAlg に PrivateKeyJWT を使えるように
     };
   }
 }

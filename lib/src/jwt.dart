@@ -1,15 +1,19 @@
 import 'dart:convert';
 
-import 'package:crypto/crypto.dart';
-import 'package:ecdsa/ecdsa.dart' as ecdsa;
 import 'package:elliptic/elliptic.dart';
 import 'package:http/http.dart' as http;
 
-import 'extension.dart';
-import 'generate.dart';
 import 'utils.dart';
 import 'api_client.dart';
 import 'request.dart';
+import 'b64.dart';
+import 'jwt/payload.dart';
+import 'jwt/signature.dart';
+import 'jwt/verify.dart';
+
+export 'jwt/payload.dart';
+export 'jwt/signature.dart';
+export 'jwt/verify.dart';
 
 main() async {
   var [d] = privateKey(getKey('files/ES256_private.pem'));
@@ -50,179 +54,6 @@ main() async {
 }
 
 ///
-/// ====================
-///
-enum Kty {
-  EC,
-  ;
-
-  String toJson() {
-    return toString();
-  }
-
-  @override
-  String toString() {
-    return this.name;
-  }
-}
-
-enum Crv {
-  P256('P-256'),
-  ;
-
-  final String value;
-
-  const Crv(this.value);
-
-  String toJson() {
-    return toString();
-  }
-
-  @override
-  String toString() {
-    return this.value;
-  }
-}
-
-///
-/// ==================
-///
-abstract class JWTBase {
-  String type = 'unknwon';
-  Map<String, dynamic> payload();
-}
-
-class DPoP implements JWTBase {
-  String type = 'dpop+jwt';
-
-  final String endpoint;
-  final String method;
-  DPoP(this.endpoint, this.method);
-
-  Map<String, dynamic> payload() {
-    final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
-
-    return {
-      'jti': createRandomString(16),
-      'htm': method,
-      'htu': endpoint,
-      'iat': now,
-    };
-  }
-}
-
-class PrivateKeyJWT implements JWTBase {
-  String type = 'JWT';
-
-  final String endpoint;
-  final String clientId;
-  PrivateKeyJWT(this.endpoint, this.clientId);
-
-  Map<String, dynamic> payload() {
-    final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
-
-    return {
-      'jti': createRandomString(16),
-      'sub': clientId,
-      'iss': clientId,
-      'aud': endpoint,
-      'exp': now + 600,
-      'iat': now
-    };
-  }
-}
-
-///
-/// ===================
-///
-mixin ECLogic {
-  List<int> createMessageHash(String message) {
-    return sha256.convert(utf8.encode(message)).bytes;
-  }
-}
-
-///
-/// ===================
-///
-abstract class SignatureLogic {
-  String algorithm = 'unknown';
-  List<int> doCompact(String body);
-  Map<String, dynamic> createJwk();
-}
-
-class ECSignatureLogic with ECLogic implements SignatureLogic {
-  String algorithm = 'ES256';
-
-  final PrivateKey key;
-
-  ECSignatureLogic(this.key);
-
-  List<int> doCompact(String body) {
-    ecdsa.Signature sign = ecdsa.signature(key, createMessageHash(body));
-    return sign.toCompact();
-  }
-
-  Map<String, dynamic> createJwk() {
-    List<int> x = hexToBytes(key.publicKey.X.toRadixString(16));
-    List<int> y = hexToBytes(key.publicKey.Y.toRadixString(16));
-
-    return {
-      'kty': Kty.EC,
-      'crv': Crv.P256,
-      'x': encode(x),
-      'y': encode(y),
-    };
-  }
-}
-
-///
-/// ==================
-///
-abstract class VerifyLogic {
-  String algorithm = 'unknown';
-  bool verify(String body, List<int> signature);
-
-  static fromName(String name, Map<String, dynamic> jwk) {
-    switch (name) {
-      case 'ES256':
-        return ECVerifyLogic.fromJwk(jwk);
-      case 'HS256':
-        return HmacVerifyLogic();
-      default:
-        throw Exception('Not supported algorithm "$name"');
-    }
-  }
-}
-
-class ECVerifyLogic with ECLogic implements VerifyLogic {
-  String algorithm = 'ES256';
-
-  final PublicKey key;
-
-  ECVerifyLogic(this.key);
-
-  factory ECVerifyLogic.fromJwk(Map<String, dynamic> jwk) {
-    BigInt x = BigInt.parse(decode(jwk['x']).toHex(), radix: 16);
-    BigInt y = BigInt.parse(decode(jwk['y']).toHex(), radix: 16);
-    return ECVerifyLogic(PublicKey(getP256(), x, y));
-  }
-
-  bool verify(String body, List<int> signature) {
-    ecdsa.Signature sign = ecdsa.Signature.fromCompact(signature);
-    return ecdsa.verify(key, createMessageHash(body), sign);
-  }
-}
-
-class HmacVerifyLogic implements VerifyLogic {
-  String algorithm = 'HS256';
-
-  bool verify(String body, List<int> signature) {
-    // TODO: ロジック後で考える
-    return true;
-  }
-}
-
-///
 /// ================
 ///
 String createJWT(JWTBase obj, SignatureLogic logic, {bool isJwk = false}) {
@@ -232,21 +63,21 @@ String createJWT(JWTBase obj, SignatureLogic logic, {bool isJwk = false}) {
     if (isJwk) 'jwk': logic.createJwk(),
   };
 
-  final b64Header = encode(jsonEncode(header).codeUnits);
-  final b64Payload = encode(jsonEncode(obj.payload()).codeUnits);
+  final b64Header = B64.urlencode(jsonEncode(header));
+  final b64Payload = B64.urlencode(jsonEncode(obj.payload()));
 
   String message = "$b64Header.$b64Payload";
 
-  final b64Sign = encode(logic.doCompact(message));
+  final b64Sign = B64.urlencode(logic.doCompact(message));
 
   return "$message.$b64Sign";
 }
 
 Map<String, dynamic> parseJWT(String jwt, {List<dynamic>? jwks}) {
   var [b64Header, b64Payload, b64Sign] = jwt.split('.');
-  var header = jsonDecode(utf8.decode(decode(b64Header)));
-  var payload = jsonDecode(utf8.decode(decode(b64Payload)));
-  var signature = decode(b64Sign);
+  var header = jsonDecode(B64.urldecode<String>(b64Header));
+  var payload = jsonDecode(B64.urldecode<String>(b64Payload));
+  var signature = B64.urldecode(b64Sign);
 
   Map<String, dynamic> jwk;
   if (header.containsKey('kid')) {

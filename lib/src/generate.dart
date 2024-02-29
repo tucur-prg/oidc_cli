@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import 'extension.dart';
-import 'utils.dart';
+import 'B64.dart';
 
 const _CHARSET =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-.,';
@@ -17,11 +17,11 @@ var _rand = Random.secure();
 ///
 String createVerifier() {
   List<int> bytes = List.generate(48, (_) => _rand.nextInt(256));
-  return encode(bytes);
+  return B64.urlencode(bytes);
 }
 
 String createCodeChallenge(String verifier) {
-  return encode(sha256.convert(utf8.encode(verifier)).bytes);
+  return B64.urlencode(sha256.convert(utf8.encode(verifier)).bytes);
 }
 
 ///

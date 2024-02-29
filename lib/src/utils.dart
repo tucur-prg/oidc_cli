@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:io';
 
@@ -67,26 +66,6 @@ List<List<int>> publicKey(List<int> pem) {
   var y = xy.getRange(2 + keySize, xy.length).toList();
 
   return [x, y];
-}
-
-// TODO: encode, decode の rename
-
-//
-// B64urlエンコード
-//
-String encode(List<int> bytes) {
-  var str = base64UrlEncode(bytes);
-  str = str.replaceAll('=', '');
-  return str;
-}
-
-///
-/// B64urlデコード
-///
-Uint8List decode(String text) {
-  int add = text.length % 4;
-  var str = text + ('=' * ((4 - add) % 4));
-  return base64Decode(str);
 }
 
 ///
